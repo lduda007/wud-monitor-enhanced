@@ -2,7 +2,7 @@
 
 A Home Assistant integration for [What's Up Docker (WUD)](https://github.com/getwud/wud) that tracks container update availability and exposes controls directly in Home Assistant.
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/johro897/wud-monitor)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/lduda007/wud-monitor)
 
 ---
 
@@ -55,11 +55,11 @@ labels:
 ### Via HACS (recommended)
 
 1. In HACS, go to **Integrations → ⋮ → Custom repositories**
-2. Paste `https://github.com/johro897/wud-monitor` and choose **Integration**
+2. Paste `https://github.com/lduda007/wud-monitor` and choose **Integration**
 3. Click **Add**, then find **WUD Monitor** and install it
 4. Restart Home Assistant
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=johro897&repository=wud-monitor&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lduda007&repository=wud-monitor&category=integration)
 
 ### Manual installation
 
@@ -139,4 +139,4 @@ Check the poll interval in the integration settings. You can also press the **Fo
 
 ## Contributions
 
-Contributions are welcome! Open an issue or pull request on [GitHub](https://github.com/johro897/wud-monitor).
+Contributions are welcome! Open an issue or pull request on [GitHub](https://github.com/lduda007/wud-monitor).

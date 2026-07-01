@@ -26,15 +26,7 @@ def _get_compose_project(container: dict) -> str | None:
 
 
 def _get_current_version(container: dict) -> str:
-    """
-    Return the currently running version.
-    Prefers org.opencontainers.image.version from labels (e.g. '2026.2.4')
-    over image.tag.value which may be truncated (e.g. '2026.2').
-    """
-    labels = container.get("labels", {}) or {}
-    oci_version = labels.get("org.opencontainers.image.version")
-    if oci_version:
-        return oci_version
+    """Return the currently running version from image.tag.value."""
     image = container.get("image", {}) or {}
     tag = image.get("tag", {}) or {}
     return tag.get("value", "unknown")
@@ -280,6 +272,7 @@ class WUDContainerSensor(CoordinatorEntity, SensorEntity):
         available_since, days_available = _get_image_created(container)
 
         attrs: dict = {
+            "instance_name": self._instance_name,
             "container_id": container.get("id"),
             "image": image.get("name", "unknown"),
             "registry": registry.get("name", "unknown"),
