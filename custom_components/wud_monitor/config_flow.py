@@ -13,11 +13,13 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    CONF_ADD_INSTANCE_NAME,
     CONF_HOST,
     CONF_INSTANCE_NAME,
     CONF_POLL_INTERVAL,
     CONF_PORT,
     CONF_TRIGGERS_EXCLUDED,
+    DEFAULT_ADD_INSTANCE_NAME,
     DEFAULT_INSTANCE_NAME,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_PORT,
@@ -59,6 +61,10 @@ def _build_schema(defaults: dict, trigger_options: list[str] | None = None) -> v
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Optional(
+                CONF_ADD_INSTANCE_NAME,
+                default=defaults.get(CONF_ADD_INSTANCE_NAME, DEFAULT_ADD_INSTANCE_NAME),
+            ): bool,
         }
     )
 

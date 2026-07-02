@@ -9,10 +9,12 @@
           "port": "Port",
           "instance_name": "Instance name",
           "poll_interval": "Poll interval (minutes)",
-          "triggers_excluded": "Triggers excluded"
+          "triggers_excluded": "Triggers excluded",
+          "add_instance_name": "Add instance name to sensors"
         },
         "data_description": {
-          "triggers_excluded": "Trigger identifiers (e.g. docker.local) for which no per-container button will be created."
+          "triggers_excluded": "Trigger identifiers (e.g. docker.local) for which no per-container button will be created.",
+          "add_instance_name": "Prefix per-container sensor and button names with the instance name, to tell entities apart when multiple WUD instances are configured."
         }
       }
     },
@@ -32,10 +34,12 @@
           "port": "Port",
           "instance_name": "Instance name",
           "poll_interval": "Poll interval (minutes)",
-          "triggers_excluded": "Triggers excluded"
+          "triggers_excluded": "Triggers excluded",
+          "add_instance_name": "Add instance name to sensors"
         },
         "data_description": {
-          "triggers_excluded": "Trigger identifiers (e.g. docker.local) for which no per-container button will be created."
+          "triggers_excluded": "Trigger identifiers (e.g. docker.local) for which no per-container button will be created.",
+          "add_instance_name": "Prefix per-container sensor and button names with the instance name, to tell entities apart when multiple WUD instances are configured."
         }
       }
     },

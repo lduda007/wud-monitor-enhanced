@@ -13,9 +13,11 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CONF_ADD_INSTANCE_NAME,
     CONF_INSTANCE_NAME,
     CONF_TRIGGERS_EXCLUDED,
     CONTROLLER_DEVICE_SUFFIX,
+    DEFAULT_ADD_INSTANCE_NAME,
     DOMAIN,
     TRIGGER_REFRESH_DELAY,
 )
@@ -24,6 +26,7 @@ from .sensor import (
     _build_container_device,
     _build_controller_device,
     _get_compose_project,
+    _name_prefix,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,6 +40,7 @@ async def async_setup_entry(
     """Set up WUD Monitor buttons from a config entry."""
     coordinator: WUDCoordinator = hass.data[DOMAIN][entry.entry_id]
     instance_name = entry.data[CONF_INSTANCE_NAME]
+    add_instance_name = entry.data.get(CONF_ADD_INSTANCE_NAME, DEFAULT_ADD_INSTANCE_NAME)
     excluded_triggers: set[str] = set(entry.data.get(CONF_TRIGGERS_EXCLUDED) or [])
 
     entities: list[ButtonEntity] = []
@@ -52,7 +56,11 @@ async def async_setup_entry(
         project = _get_compose_project(container)
 
         # Per-container scan button
-        entities.append(WUDContainerScanButton(coordinator, entry, instance_name, container))
+        entities.append(
+            WUDContainerScanButton(
+                coordinator, entry, instance_name, container, add_instance_name
+            )
+        )
 
         # One button per available trigger, unless the trigger is excluded
         for trigger_id in coordinator.available_triggers_for(container):
@@ -67,7 +75,7 @@ async def async_setup_entry(
                 continue
             entities.append(
                 WUDContainerTriggerButton(
-                    coordinator, entry, instance_name, container, trigger_id
+                    coordinator, entry, instance_name, container, trigger_id, add_instance_name
                 )
             )
 
@@ -192,6 +200,7 @@ class WUDContainerScanButton(CoordinatorEntity, ButtonEntity):
         entry: ConfigEntry,
         instance_name: str,
         container: dict,
+        add_instance_name: bool = DEFAULT_ADD_INSTANCE_NAME,
     ) -> None:
         """Initialize the container scan button."""
         super().__init__(coordinator)
@@ -200,7 +209,8 @@ class WUDContainerScanButton(CoordinatorEntity, ButtonEntity):
         self._container_watcher = container.get("watcher", "docker")
         self._container_id = container["id"]
 
-        self._attr_name = f"{container['name']} Force Scan"
+        prefix = _name_prefix(instance_name, add_instance_name)
+        self._attr_name = f"{prefix}{container['name']} Force Scan"
         self._attr_unique_id = (
             f"wud_{entry.entry_id}_{self._container_watcher}_{self._container_name}_scan"
         )
@@ -241,6 +251,7 @@ class WUDContainerTriggerButton(CoordinatorEntity, ButtonEntity):
         instance_name: str,
         container: dict,
         trigger_id: str,
+        add_instance_name: bool = DEFAULT_ADD_INSTANCE_NAME,
     ) -> None:
         """Initialize the container trigger button.
 
@@ -254,7 +265,8 @@ class WUDContainerTriggerButton(CoordinatorEntity, ButtonEntity):
         self._trigger_id = trigger_id
         self._trigger_type, self._trigger_name = trigger_id.split(".", 1)
 
-        self._attr_name = f"{container['name']} Trigger {trigger_id}"
+        prefix = _name_prefix(instance_name, add_instance_name)
+        self._attr_name = f"{prefix}{container['name']} Trigger {trigger_id}"
         self._attr_unique_id = (
             f"wud_{entry.entry_id}_{self._container_watcher}_{self._container_name}"
             f"_trigger_{trigger_id}"

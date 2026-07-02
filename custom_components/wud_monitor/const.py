@@ -8,12 +8,14 @@ CONF_PORT = "port"
 CONF_INSTANCE_NAME = "instance_name"
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_TRIGGERS_EXCLUDED = "triggers_excluded"
+CONF_ADD_INSTANCE_NAME = "add_instance_name"
 
 # Defaults
 DEFAULT_PORT = 3000
 DEFAULT_POLL_INTERVAL = 15  # minutes
 DEFAULT_INSTANCE_NAME = "WUD"
 DEFAULT_TRIGGERS_EXCLUDED: list[str] = []
+DEFAULT_ADD_INSTANCE_NAME = False
 
 # API endpoints
 API_CONTAINERS = "/api/containers"

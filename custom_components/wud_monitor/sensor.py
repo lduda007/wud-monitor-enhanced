@@ -13,10 +13,26 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_INSTANCE_NAME, CONTROLLER_DEVICE_SUFFIX, DOMAIN
+from .const import (
+    CONF_ADD_INSTANCE_NAME,
+    CONF_INSTANCE_NAME,
+    CONTROLLER_DEVICE_SUFFIX,
+    DEFAULT_ADD_INSTANCE_NAME,
+    DOMAIN,
+)
 from .coordinator import WUDCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _name_prefix(instance_name: str, add_instance_name: bool) -> str:
+    """Return an instance-name prefix for per-container entity names.
+
+    When enabled, per-container sensors/buttons are prefixed with the instance
+    name so entities from multiple WUD instances can be told apart.
+    Controller-level entities already embed the instance name in their names.
+    """
+    return f"{instance_name} " if add_instance_name else ""
 
 
 def _get_compose_project(container: dict) -> str | None:
@@ -112,6 +128,7 @@ async def async_setup_entry(
     """Set up WUD Monitor sensors from a config entry."""
     coordinator: WUDCoordinator = hass.data[DOMAIN][entry.entry_id]
     instance_name = entry.data[CONF_INSTANCE_NAME]
+    add_instance_name = entry.data.get(CONF_ADD_INSTANCE_NAME, DEFAULT_ADD_INSTANCE_NAME)
 
     entities: list[SensorEntity] = []
 
@@ -122,7 +139,9 @@ async def async_setup_entry(
 
     # Per-container sensors
     for container in coordinator.data or []:
-        entities.append(WUDContainerSensor(coordinator, entry, instance_name, container))
+        entities.append(
+            WUDContainerSensor(coordinator, entry, instance_name, container, add_instance_name)
+        )
 
     async_add_entities(entities)
 
@@ -221,6 +240,7 @@ class WUDContainerSensor(CoordinatorEntity, SensorEntity):
         entry: ConfigEntry,
         instance_name: str,
         container: dict,
+        add_instance_name: bool = DEFAULT_ADD_INSTANCE_NAME,
     ) -> None:
         """Initialize the container sensor."""
         super().__init__(coordinator)
@@ -229,7 +249,8 @@ class WUDContainerSensor(CoordinatorEntity, SensorEntity):
         self._container_name = container["name"]
         self._container_watcher = container.get("watcher", "docker")
 
-        self._attr_name = f"{container['name']} Update Available"
+        prefix = _name_prefix(instance_name, add_instance_name)
+        self._attr_name = f"{prefix}{container['name']} Update Available"
 
         # Stable unique_id — uses entry_id + watcher + name.
         # Container ID changes on every redeploy; watcher and name do not.
