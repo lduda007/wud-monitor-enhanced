@@ -128,6 +128,38 @@ One device per Docker Compose project. Linked to the Controller device via `via_
 
 ---
 
+## Dashboard card
+
+A ready-made Lovelace card is provided in [`lovelace/wud-monitor-dashboard.yaml`](lovelace/wud-monitor-dashboard.yaml). It is fully dynamic — it auto-discovers the integration's entities, so you never have to list containers by hand.
+
+**What it shows**
+
+- Containers grouped by **instance**, then by **watcher**, and inside each group split into **Update Available** (shown expanded) and **Up to date** (collapsed by default in an `expander-card`).
+- Each container shows its current version (`current → new` plus `(Nd ago)` when an update exists). The card's icon is **colour-coded by severity** (`semver_diff`): red = major, amber = patch, orange = minor/unknown, green = up to date. Two icon-only controls per row:
+  - **Rescan** (magnify-scan) — re-checks that single container for updates (the container's *Force Scan* button).
+  - **Update** (tray-arrow-down) — runs the container's WUD trigger, after a confirmation prompt. One Update button per available trigger.
+- Per-instance controls: **Force Scan All** and **Refresh States**, plus summary chips for *containers with updates*, *monitored containers*, and *last poll*.
+- Tapping a container opens its more-info dialog with all attributes.
+
+**Requirements** — install both from HACS → **Frontend**:
+
+- [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) (`thomasloven/lovelace-auto-entities`)
+- [Mushroom](https://github.com/piitaya/lovelace-mushroom) (`piitaya/lovelace-mushroom`)
+- [expander-card](https://github.com/Alia5/lovelace-expander-card) (`Alia5/lovelace-expander-card`) — for the collapsible "Up to date" section
+
+**Install the card**
+
+1. Open your dashboard → **Edit dashboard** → **＋ Add Card** → **Manual**.
+2. Paste the contents of `lovelace/wud-monitor-dashboard.yaml` and save.
+
+The card works with a single WUD instance or several — each configured instance gets its own section automatically.
+
+> **Note:** the card derives each container's Rescan/Update buttons by matching entity names (`… Force Scan`, `… Trigger {type}.{name}`). If you rename these entities in Home Assistant, the matching buttons won't be found.
+>
+> **If you edit the template:** it must end with `{{ ns.cards }}` — do **not** add `| tojson`. auto-entities parses the plain output directly; `tojson` emits `\uXXXX` escapes its parser rejects, making every card show "Configuration error".
+
+---
+
 ## Troubleshooting
 
 **Integration fails to connect**
