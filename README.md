@@ -81,6 +81,7 @@ Go to **Settings → Devices & Services → Add Integration** and search for **W
 | **Instance name** | Friendly name shown as the Controller device in HA | `WUD` |
 | **Poll interval** | How often HA fetches data from WUD (minutes) | `15` |
 | **Triggers excluded** | Trigger identifiers (e.g. `docker.local`) for which no per-container trigger button is created | _(none)_ |
+| **Add instance name to sensors** | Prefix per-container sensor and button names with the instance name, so entities can be told apart when multiple WUD instances are configured | `off` |
 
 Settings can be changed later via the integration's **Configure** button.
 
