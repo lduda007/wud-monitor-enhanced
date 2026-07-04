@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# WUD Monitor — dashboard card
+# WUD Monitor Enhanced — dashboard card
 # ---------------------------------------------------------------------------
 # A single, fully dynamic Lovelace card for the "wud_monitor" integration.
 # It auto-discovers every container sensor (no need to list entities by hand),
@@ -47,6 +47,14 @@
 #   Dashboard -> Edit -> Add Card -> Manual, then paste this file's contents.
 #   (Or add it under a view's `cards:` in YAML-mode dashboards.)
 #
+# Filtering by instance:
+#   By default the card shows every WUD instance it discovers. To restrict it to
+#   one or more specific instances, edit the `include_instances` list near the top
+#   of the template below, e.g.:
+#       {% set include_instances = ["Home Server", "NAS"] %}
+#   Names must match the integration's instance_name exactly (case-sensitive).
+#   Leave the list empty (`[]`) to show all instances.
+#
 # IMPORTANT: the template ends with `{{ ns.cards }}` — do NOT pipe it through
 # `| tojson`. auto-entities parses the plain (Python-style) output directly;
 # `tojson` produces \uXXXX escapes that its YAML parser rejects, which makes
@@ -59,10 +67,15 @@ card:
 card_param: cards
 filter:
   template: |
+    {# ---- CONFIG: restrict the card to specific instances ----
+       List the instance_name(s) you want to display (exact, case-sensitive),
+       e.g. ["Home Server", "NAS"]. Leave empty to show every instance. #}
+    {% set include_instances = [] %}
+
     {% set ns = namespace(cards=[]) %}
     {% set ns.cards = ns.cards + [{
       "type": "custom:mushroom-title-card",
-      "title": "WUD Monitor"
+      "title": "WUD Monitor Enhanced"
     }] %}
 
     {# All per-container sensors expose these attributes; controller sensors do not. #}
@@ -73,6 +86,9 @@ filter:
          | list %}
 
     {% set instances = sensors | map(attribute='attributes.instance_name') | unique | list | sort %}
+    {% if include_instances | count %}
+      {% set instances = instances | select('in', include_instances) | list %}
+    {% endif %}
     {% for inst in instances %}
       {% set inst_sensors = sensors | selectattr('attributes.instance_name', 'equalto', inst) | list %}
 
@@ -124,15 +140,14 @@ filter:
       {% set watchers = normal_sensors | map(attribute='attributes.watcher') | unique | list | sort %}
       {% for w in watchers %}
         {% set group = normal_sensors | selectattr('attributes.watcher', 'equalto', w) | list %}
-        {% set ns.cards = ns.cards + [{
-          "type": "custom:mushroom-title-card",
-          "subtitle": "Watcher: " ~ w
-        }] %}
 
         {% for status in [true, false] %}
           {% set rows = group | selectattr('attributes.update_available', 'equalto', status) | list | sort(attribute='name') %}
           {% if rows | count %}
-            {% set header = ("Update Available (" ~ (rows|count) ~ ")") if status else ("Up to date (" ~ (rows|count) ~ ")") %}
+            {# Watcher name is folded into the status header (with a middot) so it
+               shares one title row instead of stacking a second, padded card. #}
+            {% set label = ("Update Available (" ~ (rows|count) ~ ")") if status else ("Up to date (" ~ (rows|count) ~ ")") %}
+            {% set header = w ~ " · " ~ label %}
             {% set grp = namespace(cards=[]) %}
 
             {% for s in rows %}
@@ -314,7 +329,7 @@ filter:
     {% if sensors | count == 0 %}
       {% set ns.cards = ns.cards + [{
         "type": "markdown",
-        "content": "No WUD container sensors found. Make sure the **WUD Monitor** integration is set up and has polled at least once."
+        "content": "No WUD container sensors found. Make sure the **WUD Monitor Enhanced** integration is set up and has polled at least once."
       }] %}
     {% endif %}
 

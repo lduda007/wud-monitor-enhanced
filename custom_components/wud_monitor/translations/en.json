@@ -28,7 +28,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "WUD Monitor settings",
+        "title": "WUD Monitor Enhanced settings",
         "data": {
           "host": "Host",
           "port": "Port",

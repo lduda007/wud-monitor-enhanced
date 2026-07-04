@@ -9,7 +9,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
@@ -19,7 +18,6 @@ from .const import (
     CONTROLLER_DEVICE_SUFFIX,
     DEFAULT_ADD_INSTANCE_NAME,
     DOMAIN,
-    TRIGGER_REFRESH_DELAY,
 )
 from .coordinator import WUDCoordinator
 from .sensor import (
@@ -307,9 +305,6 @@ class WUDContainerTriggerButton(CoordinatorEntity, ButtonEntity):
                 self._container_name,
             )
 
-        # WUD needs a moment to process the trigger (and it may still be running
-        # even if the HTTP call timed out), so refresh state after a short delay.
-        async def _refresh(_now) -> None:
-            await self.coordinator.async_request_refresh()
-
-        async_call_later(self.hass, TRIGGER_REFRESH_DELAY, _refresh)
+        # The trigger POST has returned, so WUD has already processed it;
+        # refresh immediately to pick up the updated state.
+        await self.coordinator.async_request_refresh()

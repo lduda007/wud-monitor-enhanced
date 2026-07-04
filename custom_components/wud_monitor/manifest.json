@@ -1,12 +1,12 @@
 {
   "domain": "wud_monitor",
-  "name": "WUD Monitor",
-  "codeowners": ["@lduda007"],
+  "name": "WUD Monitor Enhanced",
+  "codeowners": ["@lduda007", "@johro897"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/lduda007/wud-monitor",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/lduda007/wud-monitor/issues",
   "requirements": [],
-  "version": "1.1.0"
+  "version": "1.2.0"
 }

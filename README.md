@@ -1,4 +1,8 @@
-# WUD Monitor
+# WUD Monitor Enhanced
+
+<p align="center">
+  <img src="custom_components/wud_monitor/brand/icon.png" alt="WUD Monitor Enhanced logo" width="200">
+</p>
 
 A Home Assistant integration for [What's Up Docker (WUD)](https://github.com/getwud/wud) that tracks container update availability and exposes controls directly in Home Assistant.
 
@@ -58,7 +62,7 @@ labels:
 
 1. In HACS, go to **Integrations → ⋮ → Custom repositories**
 2. Paste `https://github.com/lduda007/wud-monitor` and choose **Integration**
-3. Click **Add**, then find **WUD Monitor** and install it
+3. Click **Add**, then find **WUD Monitor Enhanced** and install it
 4. Restart Home Assistant
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lduda007&repository=wud-monitor&category=integration)
@@ -72,7 +76,7 @@ labels:
 
 ## Configuration
 
-Go to **Settings → Devices & Services → Add Integration** and search for **WUD Monitor**.
+Go to **Settings → Devices & Services → Add Integration** and search for **WUD Monitor Enhanced**.
 
 | Field | Description | Default |
 |---|---|---|
@@ -107,7 +111,7 @@ One device per Docker Compose project. Linked to the Controller device via `via_
 |---|---|---|
 | {container} Update Available | Sensor | Per-container update status |
 | Force Scan | Button | Scans each container in the project individually |
-| {container} Trigger {type}.{name} | Button | Runs the given WUD trigger on the container via `POST /api/containers/{id}/triggers/{type}/{name}` — one button per available trigger, minus any excluded triggers. State is refreshed ~10s after the trigger runs, since WUD needs a moment to process it |
+| {container} Trigger {type}.{name} | Button | Runs the given WUD trigger on the container via `POST /api/containers/{id}/triggers/{type}/{name}` — one button per available trigger, minus any excluded triggers. State is refreshed immediately once the trigger request returns |
 
 ### Per-container sensor attributes
 
@@ -185,3 +189,18 @@ Check the poll interval in the integration settings. You can also press the **Fo
 ## Contributions
 
 Contributions are welcome! Open an issue or pull request on [GitHub](https://github.com/lduda007/wud-monitor).
+
+---
+
+## Credits & attribution
+
+This project is based on the original WUD Monitor integration by [**@johro897**](https://github.com/johro897) — huge thanks for the original code base that this work builds upon.
+
+**WUD Monitor Enhanced** extends that foundation with additional functionality, including:
+
+- Per-container **trigger buttons** to run any WUD trigger on demand, with a configurable exclusion list
+- **Refresh states** button to re-fetch data without triggering a scan
+- **Richer sensor attributes** (icon, available triggers, release notes, error messages)
+- **Multi-instance ergonomics** (optional instance-name prefixing on entities)
+- A ready-made **Lovelace dashboard card**
+- More accurate **version detection** and **immediate state refresh** after triggers
