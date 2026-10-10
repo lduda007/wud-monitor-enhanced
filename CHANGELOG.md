@@ -1,4 +1,30 @@
 # Changelog
+## 1.4.0
+
+Adds support for What's Up Docker 9.x.
+
+### Added
+
+- **Username and password** config options — optional HTTP Basic credentials sent with every WUD API request. Required for WUD 9.0.0+, which makes API authentication mandatory; leave them empty for older WUD instances without authentication. Setup reports a dedicated error when WUD requires credentials or rejects them.
+- **WUD version detection** via `GET /api/app`, exposed as a new controller-level **Version** sensor. Snooze features are enabled only on WUD 9.1.0 or newer.
+- **`container_name` sensor attribute** on per-container sensors.
+- **Snooze sensor attributes** (WUD 9.1.0+): `is_snoozed`, `snoozed_version` and `snoozed_until` (local time; absent when snoozed indefinitely).
+- **`wud_monitor.snooze_update` action** — snoozes a container's update indefinitely, for a `duration`, or `until` a date/time; optionally for a specific `version`.
+- **`wud_monitor.unsnooze_update` action** — removes a container's snooze.
+- **Dashboard card**: a collapsible **Snoozed** section per watcher showing which version is snoozed and until when, a **Snooze** button on containers with an update (7 days by default, configurable via `snooze_days`), and an **Unsnooze** button on snoozed containers.
+- **Dashboard card**: configurable buttons on containers with an update — `show_scan_button`, `show_release_notes_button`, `show_snooze_button` and `show_update_button` flags near the top of the template (all `true` by default).
+
+### Changed
+
+- WUD API authentication/permission failures (HTTP 401/403) now log WUD's error message and a hint to check the credentials, instead of a bare status code.
+- README: corrected the documented default poll interval to 60 minutes.
+- **Minimum Home Assistant version is now 2024.12.0**, declared in `hacs.json` so HACS blocks installs on older versions. The options flow already depended on 2024.12 (older versions fail when opening **Configure**); the README previously stated 2024.1.
+
+### Fixed
+
+- Compose project devices now link to the Controller device with `via_device_id` on Home Assistant 2026.8+, fixing the deprecation warning about `via_device` (which stops working in 2027.8). Older Home Assistant versions keep using `via_device`.
+- **Dashboard card**: container rows no longer start with the device name (e.g. `– docker jackett`) on Home Assistant 2026.8+, which prefixes entity friendly names with their device name. Rows are now labelled from the new `container_name` sensor attribute.
+
 ## 1.3.0
 
 ### Added

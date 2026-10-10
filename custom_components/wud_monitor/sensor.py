@@ -3,26 +3,49 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import voluptuous as vol
 
 from homeassistant.util import dt as dt_util
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv, entity_platform
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    ATTR_DURATION,
+    ATTR_UNTIL,
+    ATTR_VERSION,
     CONF_ADD_INSTANCE_NAME,
     CONF_INSTANCE_NAME,
     CONTROLLER_DEVICE_SUFFIX,
     DEFAULT_ADD_INSTANCE_NAME,
     DOMAIN,
+    SERVICE_SNOOZE_UPDATE,
+    SERVICE_UNSNOOZE_UPDATE,
+    SNOOZE_MIN_VERSION,
 )
 from .coordinator import WUDCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+# HA 2026.8 added DeviceInfo "via_device_id" and deprecated "via_device" (removed
+# in 2027.8). Older HA versions only understand "via_device".
+_SUPPORTS_VIA_DEVICE_ID = "via_device_id" in DeviceInfo.__annotations__
+
+# Schema for the snooze_update action: an absolute end ("until") or a relative
+# one ("duration"), never both; neither means "snooze indefinitely".
+SNOOZE_UPDATE_SCHEMA = {
+    vol.Exclusive(ATTR_UNTIL, "snooze_end", msg="Set either until or duration, not both"): cv.datetime,
+    vol.Exclusive(ATTR_DURATION, "snooze_end", msg="Set either until or duration, not both"): cv.positive_time_period,
+    vol.Optional(ATTR_VERSION): cv.string,
+}
 
 
 def _name_prefix(instance_name: str, add_instance_name: bool) -> str:
@@ -99,6 +122,21 @@ def _get_image_created(container: dict) -> tuple[str | None, int | None]:
         return None, None
 
 
+def _get_snoozed_until(container: dict) -> str | None:
+    """Return snoozedUntil (epoch ms) as a local-time string, or None if unset.
+
+    WUD leaves snoozedUntil empty when an update is snoozed indefinitely.
+    """
+    until_ms = container.get("snoozedUntil")
+    if not until_ms:
+        return None
+    try:
+        until = datetime.fromtimestamp(until_ms / 1000, timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+    return dt_util.as_local(until).strftime("%Y-%m-%d %H:%M")
+
+
 def _build_controller_device(entry_id: str, instance_name: str) -> dict:
     """Build device info for the Controller device."""
     return {
@@ -109,31 +147,34 @@ def _build_controller_device(entry_id: str, instance_name: str) -> dict:
     }
 
 
-def _build_container_device(entry_id: str, instance_name: str, container: dict) -> dict:
+def _build_container_device(
+    entry_id: str, instance_name: str, container: dict, controller_device_id: str | None
+) -> dict:
     """
     Build device info for a container or compose-project device.
     Containers sharing the same compose project are grouped under one device.
     Containers without a project fall under the Controller device.
+
+    ``controller_device_id`` is the device registry id of the Controller device
+    (registered in ``async_setup_entry``); project devices link to it.
     """
     project = _get_compose_project(container)
-    controller_device_id = f"{entry_id}_{CONTROLLER_DEVICE_SUFFIX}"
 
     if project:
-        return {
+        device = {
             "identifiers": {(DOMAIN, f"{entry_id}_{project}")},
             "name": f"{instance_name} – {project}",
             "manufacturer": "What's Up Docker",
             "model": "Docker Compose Project",
-            "via_device": (DOMAIN, controller_device_id),
         }
+        if _SUPPORTS_VIA_DEVICE_ID:
+            device["via_device_id"] = controller_device_id
+        else:
+            device["via_device"] = (DOMAIN, f"{entry_id}_{CONTROLLER_DEVICE_SUFFIX}")
+        return device
 
     # No project — attach directly to the controller device
-    return {
-        "identifiers": {(DOMAIN, controller_device_id)},
-        "name": f"WUD @ {instance_name}",
-        "manufacturer": "What's Up Docker",
-        "model": "Controller",
-    }
+    return _build_controller_device(entry_id, instance_name)
 
 
 async def async_setup_entry(
@@ -152,6 +193,7 @@ async def async_setup_entry(
     entities.append(WUDUpdateCountSensor(coordinator, entry, instance_name))
     entities.append(WUDTotalCountSensor(coordinator, entry, instance_name))
     entities.append(WUDLastPollSensor(coordinator, entry, instance_name))
+    entities.append(WUDVersionSensor(coordinator, entry, instance_name))
 
     # Per-container sensors
     for container in coordinator.data or []:
@@ -160,6 +202,17 @@ async def async_setup_entry(
         )
 
     async_add_entities(entities)
+
+    # Snooze actions target per-container sensors (wud_monitor.snooze_update /
+    # wud_monitor.unsnooze_update). Registering again for another config entry
+    # is harmless: the action dispatches to entities of every entry.
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        SERVICE_SNOOZE_UPDATE, SNOOZE_UPDATE_SCHEMA, "async_snooze_update"
+    )
+    platform.async_register_entity_service(
+        SERVICE_UNSNOOZE_UPDATE, {}, "async_unsnooze_update"
+    )
 
 
 class WUDControllerSensorBase(CoordinatorEntity, SensorEntity):
@@ -178,6 +231,20 @@ class WUDControllerSensorBase(CoordinatorEntity, SensorEntity):
         self._instance_name = instance_name
         self._attr_unique_id = f"wud_{entry.entry_id}_{sensor_key}"
         self._attr_device_info = _build_controller_device(entry.entry_id, instance_name)
+
+    async def async_snooze_update(self, **kwargs) -> None:
+        """Reject snooze actions targeting a controller-level sensor."""
+        raise ServiceValidationError(
+            f"{self.entity_id} is not a container sensor; target a "
+            "'… Update Available' sensor to snooze its update"
+        )
+
+    async def async_unsnooze_update(self) -> None:
+        """Reject unsnooze actions targeting a controller-level sensor."""
+        raise ServiceValidationError(
+            f"{self.entity_id} is not a container sensor; target a "
+            "'… Update Available' sensor to unsnooze its update"
+        )
 
 
 class WUDUpdateCountSensor(WUDControllerSensorBase):
@@ -247,6 +314,20 @@ class WUDLastPollSensor(WUDControllerSensorBase):
         return None
 
 
+class WUDVersionSensor(WUDControllerSensorBase):
+    """Sensor reporting the WUD version, as returned by GET /api/app."""
+
+    def __init__(self, coordinator, entry, instance_name) -> None:
+        super().__init__(coordinator, entry, instance_name, "version")
+        self._attr_name = f"WUD @ {instance_name} Version"
+        self._attr_icon = "mdi:information-outline"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the WUD version, or None if it could not be determined."""
+        return self.coordinator.wud_version
+
+
 class WUDContainerSensor(CoordinatorEntity, SensorEntity):
     """Sensor representing a single WUD-monitored container."""
 
@@ -275,7 +356,7 @@ class WUDContainerSensor(CoordinatorEntity, SensorEntity):
         )
 
         self._attr_device_info = _build_container_device(
-            entry.entry_id, instance_name, container
+            entry.entry_id, instance_name, container, coordinator.controller_device_id
         )
 
     def _get_container(self) -> dict | None:
@@ -318,6 +399,7 @@ class WUDContainerSensor(CoordinatorEntity, SensorEntity):
 
         attrs: dict = {
             "instance_name": self._instance_name,
+            "container_name": self._container_name,
             "container_id": container.get("id"),
             "image": image.get("name", "unknown"),
             "registry": registry.get("name", "unknown"),
@@ -348,4 +430,76 @@ class WUDContainerSensor(CoordinatorEntity, SensorEntity):
         if error_message:
             attrs["error"] = error_message
 
+        # Snooze state — only on WUD 9.1.0+, so its presence also tells the
+        # dashboard that the snooze actions are available for this container.
+        # A snoozed update is reported by WUD with updateAvailable = false.
+        if self.coordinator.supports_snooze:
+            is_snoozed = bool(container.get("isSnoozed"))
+            attrs["is_snoozed"] = is_snoozed
+            if is_snoozed:
+                attrs["snoozed_version"] = container.get("snoozedVersion")
+                snoozed_until = _get_snoozed_until(container)
+                if snoozed_until:
+                    attrs["snoozed_until"] = snoozed_until
+
         return attrs
+
+    def _get_snooze_target(self) -> dict:
+        """Return this container's live data, validating that snoozing is possible."""
+        if not self.coordinator.supports_snooze:
+            raise ServiceValidationError(
+                f"Snoozing updates requires WUD {SNOOZE_MIN_VERSION} or newer; "
+                f"this instance reports version {self.coordinator.wud_version or 'unknown'}"
+            )
+        container = self._get_container()
+        if not container:
+            raise HomeAssistantError(
+                f"Container '{self._container_name}' is no longer reported by WUD"
+            )
+        return container
+
+    async def async_snooze_update(
+        self,
+        until: datetime | None = None,
+        duration: timedelta | None = None,
+        version: str | None = None,
+    ) -> None:
+        """Snooze this container's update until a time, for a duration, or indefinitely."""
+        container = self._get_snooze_target()
+        if not version and not (
+            container.get("updateAvailable")
+            or container.get("isSnoozed")
+            or container.get("isCoolingDown")
+        ):
+            raise ServiceValidationError(
+                f"Container '{self._container_name}' has no update to snooze"
+            )
+
+        if duration is not None:
+            until = dt_util.utcnow() + duration
+        elif until is not None and until.tzinfo is None:
+            # The datetime selector sends a naive local time.
+            until = until.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        if until is not None and until <= dt_util.utcnow():
+            raise ServiceValidationError("The snooze end must be in the future")
+
+        if not await self.coordinator.async_snooze_container(container["id"], version, until):
+            raise HomeAssistantError(
+                f"WUD failed to snooze the update of '{self._container_name}'; see the log for details"
+            )
+        _LOGGER.debug(
+            "Snoozed update of '%s' until %s",
+            self._container_name,
+            until or "further notice",
+        )
+        await self.coordinator.async_request_refresh()
+
+    async def async_unsnooze_update(self) -> None:
+        """Remove the snooze from this container's update."""
+        container = self._get_snooze_target()
+        if not await self.coordinator.async_unsnooze_container(container["id"]):
+            raise HomeAssistantError(
+                f"WUD failed to unsnooze the update of '{self._container_name}'; see the log for details"
+            )
+        _LOGGER.debug("Unsnoozed update of '%s'", self._container_name)
+        await self.coordinator.async_request_refresh()

@@ -4,19 +4,26 @@
 # A single, fully dynamic Lovelace card for the "wud_monitor" integration.
 # It auto-discovers every container sensor (no need to list entities by hand),
 # groups them by instance and watcher, and inside each group splits them into
-# "Update Available" and "Up to date". Each container row shows the current
-# version (-> new version, plus "(Nd ago)" when an update exists). The name
+# "Update Available", "Snoozed" and "Up to date". Each container row shows the
+# current version (-> new version, plus "(Nd ago)" when an update exists; for a
+# snoozed update, the snoozed version and until when it is snoozed). The name
 # card's icon is the container's WUD display_icon: Material Design Icons (mdi:)
 # render natively; Font Awesome (fa:) and Simple Icons (si:) are fetched as SVGs
 # from the Iconify API (api.iconify.design) and shown as a picture; anything
 # missing/unrecognised falls back to a package icon. Either way the icon is
 # colour-coded by severity (semver_diff): red=major, amber=patch,
-# orange=minor/unknown, green=up to date. Icon-only buttons per row:
+# orange=minor/unknown, blue-grey=snoozed, green=up to date. Icon-only buttons
+# per row:
 #   • magnify-scan  — Rescan: re-checks that container for updates (Force Scan);
 #                       asks to confirm first
 
 #   • note-text-outline — Release notes: opens the container's release-notes URL
 #                       in a new tab (only shown when an update is available)
+#   • bell-sleep-outline — Snooze: snoozes the offered update for `snooze_days`
+#                       days (asks to confirm first). Only on WUD 9.1.0+ and
+#                       only when an update is available.
+#   • bell-ring-outline — Unsnooze: brings a snoozed update back (asks to confirm
+#                       first). Shown on rows in the "Snoozed" section.
 #   • tray-arrow-down — Update: runs the container's WUD trigger (asks to confirm
 #                       first). One Update button per available trigger.
 # Containers WUD reported an error for (e.g. a registry rate limit) are pulled
@@ -55,6 +62,20 @@
 #   Names must match the integration's instance_name exactly (case-sensitive).
 #   Leave the list empty (`[]`) to show all instances.
 #
+# Snooze duration:
+#   The Snooze button snoozes an update for `snooze_days` days (default 7), set
+#   near the top of the template, e.g. {% set snooze_days = 14 %}. Use 0 to
+#   snooze indefinitely (until unsnoozed or a newer version appears). To snooze
+#   until a specific date, call the wud_monitor.snooze_update action with `until`.
+#
+# Buttons on containers with updates:
+#   Rows in the "Update Available" section show all four buttons (Rescan,
+#   Release notes, Snooze, Update) by default. To hide any of them, set the
+#   matching flag near the top of the template to false, e.g.
+#       {% set show_snooze_button = false %}
+#   Flags: show_scan_button, show_release_notes_button, show_snooze_button,
+#   show_update_button. Snoozed, Up to date and Errors rows are not affected.
+#
 # IMPORTANT: the template ends with `{{ ns.cards }}` — do NOT pipe it through
 # `| tojson`. auto-entities parses the plain (Python-style) output directly;
 # `tojson` produces \uXXXX escapes that its YAML parser rejects, which makes
@@ -71,6 +92,18 @@ filter:
        List the instance_name(s) you want to display (exact, case-sensitive),
        e.g. ["Home Server", "NAS"]. Leave empty to show every instance. #}
     {% set include_instances = [] %}
+
+    {# ---- CONFIG: how many days the Snooze button snoozes an update for.
+       0 = snooze indefinitely (until unsnoozed or a newer version appears). #}
+    {% set snooze_days = 7 %}
+
+    {# ---- CONFIG: which buttons to show on containers with an update available.
+       Set any to false to hide it from those rows. Rows in the Snoozed, Up to
+       date and Errors sections are not affected. #}
+    {% set show_scan_button = true %}
+    {% set show_release_notes_button = true %}
+    {% set show_snooze_button = true %}
+    {% set show_update_button = true %}
 
     {% set ns = namespace(cards=[]) %}
     {% set ns.cards = ns.cards + [{
@@ -99,10 +132,12 @@ filter:
 
       {# ---- instance header + controls ---- #}
       {% set updates_here = inst_sensors | selectattr('attributes.update_available', 'equalto', true) | list | count %}
+      {% set snoozed_here = inst_sensors | selectattr('attributes.is_snoozed', 'equalto', true) | list | count %}
       {% set ns.cards = ns.cards + [{
         "type": "custom:mushroom-title-card",
         "title": inst,
         "subtitle": updates_here ~ " update(s) across " ~ (inst_sensors | count) ~ " container(s)"
+                    ~ ((", " ~ snoozed_here ~ " snoozed") if snoozed_here else "")
       }] %}
 
       {% set updates_sensor = states.sensor | selectattr('name', 'equalto', 'WUD @ ' ~ inst ~ ' Containers with Updates') | map(attribute='entity_id') | list %}
@@ -143,28 +178,53 @@ filter:
       {% for w in watchers %}
         {% set group = normal_sensors | selectattr('attributes.watcher', 'equalto', w) | list %}
 
-        {% for status in [true, false] %}
-          {% set rows = group | selectattr('attributes.update_available', 'equalto', status) | list | sort(attribute='name') %}
+        {# WUD reports a snoozed update with update_available = false, so snoozed
+           containers are split out of "Up to date" by their is_snoozed flag
+           (only present on WUD 9.1.0+). #}
+        {% for kind in ['update', 'snoozed', 'current'] %}
+          {% set status = kind == 'update' %}
+          {% set snoozed = kind == 'snoozed' %}
+          {% if status %}
+            {% set rows = group | selectattr('attributes.update_available', 'equalto', true) | list %}
+          {% elif snoozed %}
+            {% set rows = group | rejectattr('attributes.update_available', 'equalto', true) | selectattr('attributes.is_snoozed', 'equalto', true) | list %}
+          {% else %}
+            {% set rows = group | rejectattr('attributes.update_available', 'equalto', true) | rejectattr('attributes.is_snoozed', 'equalto', true) | list %}
+          {% endif %}
+          {% set rows = rows | sort(attribute='name') %}
           {% if rows | count %}
             {# Watcher name is folded into the status header (with a middot) so it
                shares one title row instead of stacking a second, padded card. #}
-            {% set label = ("Update Available (" ~ (rows|count) ~ ")") if status else ("Up to date (" ~ (rows|count) ~ ")") %}
+            {% set label = ("Update Available (" ~ (rows|count) ~ ")") if status
+                      else ("Snoozed (" ~ (rows|count) ~ ")") if snoozed
+                      else ("Up to date (" ~ (rows|count) ~ ")") %}
             {% set header = w ~ " · " ~ label %}
             {% set grp = namespace(cards=[]) %}
 
             {% for s in rows %}
               {% set base = s.name | replace(' Update Available', '') %}
-              {% set disp = base[(inst|length + 1):] if base.startswith(inst ~ ' ') else base %}
+              {# Label from container_name: HA 2026.8+ prefixes the friendly name
+                 with the device name (e.g. "Home – docker jackett"). The fallback
+                 covers integration versions without that attribute. #}
+              {% set disp = s.attributes.container_name | default(base[(inst|length + 1):] if base.startswith(inst ~ ' ') else base) %}
               {% set cur = s.attributes.current_version %}
               {% set new = s.attributes.new_version %}
               {% set scan_btn = states.button | selectattr('name', 'equalto', base ~ ' Force Scan') | map(attribute='entity_id') | list %}
 
               {# Severity colour from semver_diff; days since the update appeared. #}
               {% set sev = s.attributes.semver_diff %}
-              {% set name_color = ("red" if sev == "major" else "amber" if sev == "patch" else "orange") if status else "green" %}
+              {% set name_color = ("red" if sev == "major" else "amber" if sev == "patch" else "orange") if status else "blue-grey" if snoozed else "green" %}
               {% set days = s.attributes.days_available %}
               {% set ver = (cur ~ " -> " ~ new) if status else cur %}
               {% set ver = (ver ~ " (" ~ days ~ "d ago)") if (status and days is defined) else ver %}
+              {# Snoozed: which version is snoozed, and until when. A digest is
+                 shortened to its first 12 hex characters. #}
+              {% if snoozed %}
+                {% set sv = s.attributes.snoozed_version | default('') | string %}
+                {% set sv = sv[7:19] if sv.startswith('sha256:') else sv %}
+                {% set su = s.attributes.snoozed_until | default(none) %}
+                {% set ver = ver ~ " · snoozed " ~ sv ~ ((" until " ~ su) if su else " indefinitely") %}
+              {% endif %}
 
               {# Container icon from WUD's display_icon. HA renders Material Design
                  Icons (mdi:) natively in the icon slot (theme-aware, colourable);
@@ -184,12 +244,12 @@ filter:
                   {% set row_icon = di %}
                 {% else %}
                   {% set ipfx = 'simple-icons' if pfx == 'si' else pfx %}
-                  {% set icol = 'orange' if name_color == 'amber' else name_color %}
+                  {% set icol = 'orange' if name_color == 'amber' else 'slategray' if name_color == 'blue-grey' else name_color %}
                   {% set row_pic = 'https://api.iconify.design/' ~ ipfx ~ '/' ~ nm ~ '.svg?color=' ~ icol %}
                 {% endif %}
               {% endif %}
               {% if not row_icon and not row_pic %}
-                {% set row_icon = 'mdi:package-up' if status else 'mdi:package-variant-closed' %}
+                {% set row_icon = 'mdi:package-up' if status else 'mdi:bell-sleep' if snoozed else 'mdi:package-variant-closed' %}
               {% endif %}
 
               {# Name / version card — gets 50% of the row width. #}
@@ -208,7 +268,7 @@ filter:
               {# Buttons are icon-only and packed into their own inner stack, so
                  they share the other 50% and stay compact no matter how many. #}
               {% set btns = namespace(cards=[]) %}
-              {% if scan_btn | count %}
+              {% if scan_btn | count and (show_scan_button or not status) %}
                 {% set btns.cards = btns.cards + [{
                   "type": "custom:mushroom-template-card",
                   "layout": "vertical",
@@ -221,7 +281,7 @@ filter:
 
               {# Release-notes link — only present when an update is available. #}
               {% set rel = s.attributes.release_notes | default(none) %}
-              {% if rel %}
+              {% if rel and (show_release_notes_button or not status) %}
                 {% set btns.cards = btns.cards + [{
                   "type": "custom:mushroom-template-card",
                   "layout": "vertical",
@@ -231,7 +291,30 @@ filter:
                 }] %}
               {% endif %}
 
-              {% set trigs = s.attributes.available_triggers or [] %}
+              {# Snooze / Unsnooze — is_snoozed is only reported on WUD 9.1.0+,
+                 so older instances get neither button. #}
+              {% if status and show_snooze_button and s.attributes.is_snoozed is defined %}
+                {% set btns.cards = btns.cards + [{
+                  "type": "custom:mushroom-template-card",
+                  "layout": "vertical",
+                  "icon": "mdi:bell-sleep-outline",
+                  "icon_color": "blue-grey",
+                  "tap_action": {"action":"call-service","service":"wud_monitor.snooze_update","target":{"entity_id": s.entity_id},
+                                 "data": ({"duration": {"days": snooze_days}} if snooze_days > 0 else {}),
+                                 "confirmation": {"text": "Snooze " ~ new ~ " on " ~ disp ~ ((" for " ~ snooze_days ~ " day(s)?") if snooze_days > 0 else " indefinitely?")}}
+                }] %}
+              {% elif snoozed %}
+                {% set btns.cards = btns.cards + [{
+                  "type": "custom:mushroom-template-card",
+                  "layout": "vertical",
+                  "icon": "mdi:bell-ring-outline",
+                  "icon_color": "blue-grey",
+                  "tap_action": {"action":"call-service","service":"wud_monitor.unsnooze_update","target":{"entity_id": s.entity_id},
+                                 "confirmation": {"text": "Unsnooze " ~ sv ~ " on " ~ disp ~ "?"}}
+                }] %}
+              {% endif %}
+
+              {% set trigs = (s.attributes.available_triggers or []) if (show_update_button or not status) else [] %}
               {% for trig in trigs %}
                 {% set upd_btn = states.button | selectattr('name', 'equalto', base ~ ' Trigger ' ~ trig) | map(attribute='entity_id') | list %}
                 {% if upd_btn | count %}
@@ -255,7 +338,7 @@ filter:
               {% endif %}
             {% endfor %}
 
-            {# "Update Available" stays open; "Up to date" collapses by default. #}
+            {# "Update Available" stays open; "Snoozed" and "Up to date" collapse by default. #}
             {% if status %}
               {% set ns.cards = ns.cards + [{"type": "custom:mushroom-title-card", "subtitle": header}] + grp.cards %}
             {% else %}
@@ -264,7 +347,7 @@ filter:
               {% set ns.cards = ns.cards + [{
                 "type": "custom:expander-card",
                 "expanded": false,
-                "expand-id": "wud-uptodate-" ~ inst ~ "-" ~ w,
+                "expand-id": ("wud-snoozed-" if snoozed else "wud-uptodate-") ~ inst ~ "-" ~ w,
                 "title": header,
                 "cards": grp.cards
               }] %}
@@ -278,7 +361,7 @@ filter:
         {% set egrp = namespace(cards=[]) %}
         {% for s in err_sensors | sort(attribute='name') %}
           {% set base = s.name | replace(' Update Available', '') %}
-          {% set disp = base[(inst|length + 1):] if base.startswith(inst ~ ' ') else base %}
+          {% set disp = s.attributes.container_name | default(base[(inst|length + 1):] if base.startswith(inst ~ ' ') else base) %}
           {% set scan_btn = states.button | selectattr('name', 'equalto', base ~ ' Force Scan') | map(attribute='entity_id') | list %}
           {# Error text is shown as the (multiline) secondary — revealed when the
              section is expanded; tapping opens more-info for full detail. #}

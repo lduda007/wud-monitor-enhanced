@@ -2,6 +2,7 @@
 
 import logging
 
+import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -10,16 +11,22 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .const import (
+    API_CONTAINERS,
     CONF_ADD_INSTANCE_NAME,
     CONF_HOST,
     CONF_INSTANCE_NAME,
+    CONF_PASSWORD,
     CONF_POLL_INTERVAL,
     CONF_PORT,
     CONF_TRIGGER_REFRESH_DELAY,
     CONF_TRIGGERS_EXCLUDED,
+    CONF_USERNAME,
     DEFAULT_ADD_INSTANCE_NAME,
     DEFAULT_INSTANCE_NAME,
     DEFAULT_POLL_INTERVAL,
@@ -28,7 +35,7 @@ from .const import (
     DEFAULT_TRIGGERS_EXCLUDED,
     DOMAIN,
 )
-from .coordinator import WUDCoordinator
+from .coordinator import WUDCoordinator, build_auth
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +52,22 @@ def _build_schema(defaults: dict, trigger_options: list[str] | None = None) -> v
             vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
             vol.Required(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): vol.All(
                 int, vol.Range(min=1, max=65535)
+            ),
+            # Credentials are optional (WUD < 9.0 may run without auth). They use
+            # suggested_value rather than default so clearing the field removes them.
+            vol.Optional(
+                CONF_USERNAME,
+                description={"suggested_value": defaults.get(CONF_USERNAME)},
+            ): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT, autocomplete="username")
+            ),
+            vol.Optional(
+                CONF_PASSWORD,
+                description={"suggested_value": defaults.get(CONF_PASSWORD)},
+            ): TextSelector(
+                TextSelectorConfig(
+                    type=TextSelectorType.PASSWORD, autocomplete="current-password"
+                )
             ),
             vol.Required(
                 CONF_INSTANCE_NAME, default=defaults.get(CONF_INSTANCE_NAME, DEFAULT_INSTANCE_NAME)
@@ -87,17 +110,34 @@ def _collect_trigger_options(coordinator: WUDCoordinator | None) -> list[str]:
     return sorted(seen)
 
 
-async def _test_connection(host: str, port: int) -> bool:
-    """Test that we can reach the WUD API and get a valid response."""
-    coordinator = WUDCoordinator(None, host, port, DEFAULT_POLL_INTERVAL)
+def _clean_input(user_input: dict) -> dict:
+    """Drop empty optional credentials so an unprotected WUD sends no auth header."""
+    data = dict(user_input)
+    for key in (CONF_USERNAME, CONF_PASSWORD):
+        if not data.get(key):
+            data.pop(key, None)
+    return data
+
+
+async def _test_connection(data: dict) -> str | None:
+    """Test that we can reach the WUD API with the given credentials.
+
+    Returns None on success, otherwise the error key to show on the form.
+    """
+    username = data.get(CONF_USERNAME)
+    auth = build_auth(username, data.get(CONF_PASSWORD))
+    url = f"http://{data[CONF_HOST]}:{data[CONF_PORT]}{API_CONTAINERS}"
     try:
-        import aiohttp
-        async with aiohttp.ClientSession() as session:
-            url = f"http://{host}:{port}/api/containers"
+        async with aiohttp.ClientSession(auth=auth) as session:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                return response.status == 200
+                if response.status == 200:
+                    return None
+                if response.status in (401, 403):
+                    # WUD 9.0+ enforces authentication on the REST API.
+                    return "invalid_auth" if username else "auth_required"
+                return "cannot_connect"
     except Exception:  # noqa: BLE001
-        return False
+        return "cannot_connect"
 
 
 class WUDMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -115,12 +155,13 @@ class WUDMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             # Verify the connection before saving
-            if not await _test_connection(user_input[CONF_HOST], user_input[CONF_PORT]):
-                errors["base"] = "cannot_connect"
+            data = _clean_input(user_input)
+            if error := await _test_connection(data):
+                errors["base"] = error
             else:
                 return self.async_create_entry(
                     title=user_input[CONF_INSTANCE_NAME],
-                    data=user_input,
+                    data=data,
                 )
 
         return self.async_show_form(
@@ -137,20 +178,21 @@ class WUDMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class WUDMonitorOptionsFlow(config_entries.OptionsFlow):
-    """Handle options updates (host, port, poll interval)."""
+    """Handle options updates (host, port, credentials, poll interval)."""
 
     async def async_step_init(self, user_input: dict | None = None):
         """Handle the options step."""
         errors = {}
 
         if user_input is not None:
-            # Re-test the connection in case host/port changed
-            if not await _test_connection(user_input[CONF_HOST], user_input[CONF_PORT]):
-                errors["base"] = "cannot_connect"
+            # Re-test the connection in case host/port/credentials changed
+            data = _clean_input(user_input)
+            if error := await _test_connection(data):
+                errors["base"] = error
             else:
                 # Update the config entry data and reload the integration
                 self.hass.config_entries.async_update_entry(
-                    self.config_entry, data=user_input
+                    self.config_entry, data=data
                 )
                 return self.async_create_entry(title="", data={})
 

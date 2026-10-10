@@ -1,0 +1,29 @@
+snooze_update:
+  target:
+    entity:
+      integration: wud_monitor
+      domain: sensor
+  fields:
+    until:
+      required: false
+      example: "2026-12-31 23:59:00"
+      selector:
+        datetime:
+    duration:
+      required: false
+      example:
+        days: 7
+      selector:
+        duration:
+          enable_day: true
+    version:
+      required: false
+      example: "2.1.0"
+      selector:
+        text:
+
+unsnooze_update:
+  target:
+    entity:
+      integration: wud_monitor
+      domain: sensor

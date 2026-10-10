@@ -10,6 +10,10 @@ CONF_POLL_INTERVAL = "poll_interval"
 CONF_TRIGGERS_EXCLUDED = "triggers_excluded"
 CONF_ADD_INSTANCE_NAME = "add_instance_name"
 CONF_TRIGGER_REFRESH_DELAY = "trigger_refresh_delay"
+# Optional HTTP Basic credentials. Required since WUD 9.0.0, which enforces
+# authentication on the REST API; older unprotected instances leave them empty.
+CONF_USERNAME = "username"
+CONF_PASSWORD = "password"
 
 # Defaults
 DEFAULT_PORT = 3000
@@ -22,6 +26,8 @@ DEFAULT_ADD_INSTANCE_NAME = False
 DEFAULT_TRIGGER_REFRESH_DELAY = 0
 
 # API endpoints
+# /api/app is not authenticated (also in WUD 9) and returns {"name", "version"}.
+API_APP = "/api/app"
 API_CONTAINERS = "/api/containers"
 API_CONTAINERS_WATCH = "/api/containers/watch"
 API_CONTAINER_WATCH = "/api/containers/{container_id}/watch"
@@ -29,6 +35,19 @@ API_CONTAINER_TRIGGERS = "/api/containers/{container_id}/triggers"
 API_CONTAINER_RUN_TRIGGER = (
     "/api/containers/{container_id}/triggers/{trigger_type}/{trigger_name}"
 )
+# POST snoozes (body: {"version", "until"}), DELETE unsnoozes. WUD 9.1.0+.
+API_CONTAINER_SNOOZE = "/api/containers/{container_id}/snooze"
+
+# Minimum WUD version exposing the snooze API and isSnoozed/snoozedVersion/
+# snoozedUntil container properties.
+SNOOZE_MIN_VERSION = "9.1.0"
+
+# Action (service) names
+SERVICE_SNOOZE_UPDATE = "snooze_update"
+SERVICE_UNSNOOZE_UPDATE = "unsnooze_update"
+ATTR_UNTIL = "until"
+ATTR_DURATION = "duration"
+ATTR_VERSION = "version"
 
 # Device identifiers
 CONTROLLER_DEVICE_SUFFIX = "controller"

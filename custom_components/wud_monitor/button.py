@@ -213,7 +213,7 @@ class WUDProjectScanButton(WUDActionButton):
 
         # Use the first container to build the project device info
         self._attr_device_info = _build_container_device(
-            entry.entry_id, instance_name, containers[0]
+            entry.entry_id, instance_name, containers[0], coordinator.controller_device_id
         )
 
     async def async_press(self) -> None:
@@ -249,7 +249,7 @@ class WUDContainerScanButton(WUDActionButton):
         )
         self._attr_icon = "mdi:refresh"
         self._attr_device_info = _build_container_device(
-            entry.entry_id, instance_name, container
+            entry.entry_id, instance_name, container, coordinator.controller_device_id
         )
 
     def _get_current_container_id(self) -> str:
@@ -306,7 +306,7 @@ class WUDContainerTriggerButton(WUDActionButton):
         )
         self._attr_icon = "mdi:play-circle-outline"
         self._attr_device_info = _build_container_device(
-            entry.entry_id, instance_name, container
+            entry.entry_id, instance_name, container, coordinator.controller_device_id
         )
 
     def _get_current_container_id(self) -> str:

@@ -7,6 +7,8 @@
         "data": {
           "host": "Host",
           "port": "Port",
+          "username": "Username",
+          "password": "Password",
           "instance_name": "Instance name",
           "poll_interval": "Poll interval (minutes)",
           "trigger_refresh_delay": "Refresh delay after trigger (seconds)",
@@ -14,6 +16,8 @@
           "add_instance_name": "Add instance name to sensors"
         },
         "data_description": {
+          "username": "Required for WUD 9.0 and newer, which protects its API with authentication. Use a user with the admin or rw role so scan, trigger and snooze actions are allowed. Leave empty for older WUD instances without authentication.",
+          "password": "Password of the WUD user. Leave empty if WUD has no authentication.",
           "trigger_refresh_delay": "Seconds to wait after a successful scan/trigger before refreshing container states. 0 = refresh immediately (default); -1 = disable auto refresh.",
           "triggers_excluded": "Trigger identifiers (e.g. docker.local) for which no per-container button will be created.",
           "add_instance_name": "Prefix per-container sensor and button names with the instance name, to tell entities apart when multiple WUD instances are configured."
@@ -21,7 +25,9 @@
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to WUD. Check that the host and port are correct and that WUD is running."
+      "cannot_connect": "Unable to connect to WUD. Check that the host and port are correct and that WUD is running.",
+      "invalid_auth": "WUD rejected the username or password.",
+      "auth_required": "This WUD instance requires authentication (WUD 9.0+). Enter a username and password."
     },
     "abort": {
       "already_configured": "This WUD instance is already configured."
@@ -34,6 +40,8 @@
         "data": {
           "host": "Host",
           "port": "Port",
+          "username": "Username",
+          "password": "Password",
           "instance_name": "Instance name",
           "poll_interval": "Poll interval (minutes)",
           "trigger_refresh_delay": "Refresh delay after trigger (seconds)",
@@ -41,6 +49,8 @@
           "add_instance_name": "Add instance name to sensors"
         },
         "data_description": {
+          "username": "Required for WUD 9.0 and newer, which protects its API with authentication. Use a user with the admin or rw role so scan, trigger and snooze actions are allowed. Leave empty for older WUD instances without authentication.",
+          "password": "Password of the WUD user. Leave empty if WUD has no authentication.",
           "trigger_refresh_delay": "Seconds to wait after a successful scan/trigger before refreshing container states. 0 = refresh immediately (default); -1 = disable auto refresh.",
           "triggers_excluded": "Trigger identifiers (e.g. docker.local) for which no per-container button will be created.",
           "add_instance_name": "Prefix per-container sensor and button names with the instance name, to tell entities apart when multiple WUD instances are configured."
@@ -48,7 +58,33 @@
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to WUD. Check that the host and port are correct and that WUD is running."
+      "cannot_connect": "Unable to connect to WUD. Check that the host and port are correct and that WUD is running.",
+      "invalid_auth": "WUD rejected the username or password.",
+      "auth_required": "This WUD instance requires authentication (WUD 9.0+). Enter a username and password."
+    }
+  },
+  "services": {
+    "snooze_update": {
+      "name": "Snooze update",
+      "description": "Snoozes the update currently offered for a WUD container, so it is no longer reported as available until the snooze expires or a newer version appears. Requires WUD 9.1.0 or newer.",
+      "fields": {
+        "until": {
+          "name": "Until",
+          "description": "Date and time until which the update is snoozed. Leave empty (and no duration) to snooze indefinitely."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long to snooze the update, counted from now. Alternative to \"Until\" — set only one of them."
+        },
+        "version": {
+          "name": "Version",
+          "description": "Version to snooze. Defaults to the update currently offered by WUD."
+        }
+      }
+    },
+    "unsnooze_update": {
+      "name": "Unsnooze update",
+      "description": "Removes the snooze from a WUD container so its update is reported again. Requires WUD 9.1.0 or newer."
     }
   }
 }
